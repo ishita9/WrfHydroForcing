@@ -98,7 +98,7 @@ class ConfigOptions:
         self.customFcstFreq = None
         self.rqiMethod = None
         self.rqiThresh = 1.0
-        self.globalNdv = -9999.0
+        self.globalNdv = -999999.0
         self.d_program_init = datetime.datetime.utcnow()
         self.errFlag = 0
         self.nwmVersion = None
@@ -140,7 +140,18 @@ class ConfigOptions:
         self.number_inputs = len(inputs)
        
         # Create Enums dynamically from the yaml files
-        self.forcingInputModYaml = config['YamlConfig']['forcingInputModYaml']
+        try:
+            yaml_config = config['YamlConfig']
+        except KeyError:
+            raise KeyError("Unable to locate YamlConfig in configuration file.")
+            err_handler.err_out_screen('Unable to locate YamlConfig in configuration file.')
+
+        try:
+            self.forcingInputModYaml = yaml_config['forcingInputModYaml']
+        except KeyError:
+            raise KeyError("Unable to locate forcingInputModYaml in configuration file.")
+            err_handler.err_out_screen('Unable to locate forcingInputModYaml in configuration file.')
+
         forcing_yaml_stream = open(self.forcingInputModYaml)
         forcingConfig = yaml.safe_load(forcing_yaml_stream)
         dynamicForcing = {}
@@ -148,15 +159,24 @@ class ConfigOptions:
             dynamicForcing[k] = k
         self.ForcingEnum = enum.Enum('ForcingEnum', dynamicForcing)
 
-        self.suppPrecipModYaml   = config['YamlConfig']['suppPrecipModYaml']
+        try:
+            self.suppPrecipModYaml   = yaml_config['suppPrecipModYaml']
+        except KeyError:
+            raise KeyError("Unable to locate suppPrecipModYaml in configuration file.")
+            err_handler.err_out_screen('Unable to locate suppPrecipModYaml in configuration file.')
+
         supp_yaml_stream = open(self.suppPrecipModYaml)
         suppConfig = yaml.safe_load(supp_yaml_stream)
         dynamicSupp = {}
         for k in suppConfig.keys():
             dynamicSupp[k] = k
         self.SuppForcingPcpEnum = enum.Enum('SuppForcingPcpEnum', dynamicSupp)
+        try:
+            self.outputVarAttrYaml  = yaml_config['outputVarAttrYaml']
+        except KeyError:
+            raise KeyError("Unable to locate outputVarAttrYaml in configuration file.")
+            err_handler.err_out_screen('Unable to locate outputVarAttrYaml in configuration file.')
 
-        self.outputVarAttrYaml  = config['YamlConfig']['outputVarAttrYaml']
         out_yaml_stream = open(self.outputVarAttrYaml)
         outConfig = yaml.safe_load(out_yaml_stream)
         dynamicOut = {}
@@ -401,25 +421,25 @@ class ConfigOptions:
         # Putting a constraint here that CFSv2-NLDAS bias correction (NWM only) is chosen, it must be turned on
         # for ALL variables.
         if self.runCfsNldasBiasCorrect:
-            if set(self.precipBiasCorrectOpt) != {'CFS_V2'}:
+            if self.precipBiasCorrectOpt != ['CFS_V2']:
                 err_handler.err_out_screen('CFSv2-NLDAS NWM bias correction must be activated for '
                                            'Precipitation under this configuration.')
-            if min(self.lwBiasCorrectOpt) != {'CFS_V2'}:
+            if self.lwBiasCorrectOpt != ['CFS_V2']:
                 err_handler.err_out_screen('CFSv2-NLDAS NWM bias correction must be activated for '
                                            'long-wave radiation under this configuration.')
-            if min(self.swBiasCorrectOpt) != {'CFS_V2'}:
+            if self.swBiasCorrectOpt != ['CFS_V2']:
                 err_handler.err_out_screen('CFSv2-NLDAS NWM bias correction must be activated for '
                                            'short-wave radiation under this configuration.')
-            if min(self.t2BiasCorrectOpt) != {'CFS_V2'}:
+            if self.t2BiasCorrectOpt != ['CFS_V2']:
                 err_handler.err_out_screen('CFSv2-NLDAS NWM bias correction must be activated for '
                                            'surface temperature under this configuration.')
-            if min(self.windBiasCorrect) != {'CFS_V2'}:
+            if self.windBiasCorrect != ['CFS_V2']:
                 err_handler.err_out_screen('CFSv2-NLDAS NWM bias correction must be activated for '
                                            'wind forcings under this configuration.')
-            if min(self.q2BiasCorrectOpt) != {'CFS_V2'}:
+            if self.q2BiasCorrectOpt != ['CFS_V2']:
                 err_handler.err_out_screen('CFSv2-NLDAS NWM bias correction must be activated for '
                                            'specific humidity under this configuration.')
-            if min(self.psfcBiasCorrectOpt) != {'CFS_V2'}:
+            if self.psfcBiasCorrectOpt != ['CFS_V2']:
                 err_handler.err_out_screen('CFSv2-NLDAS NWM bias correction must be activated for '
                                            'surface pressure under this configuration.')
             # Make sure we don't have any other forcings activated. This can only be ran for CFSv2.
@@ -430,7 +450,7 @@ class ConfigOptions:
 
         # Read in the temperature downscaling options.
         # Create temporary array to hold flags of if we need input parameter files.
-        param_flag = np.empty([len(self.input_forcings)], np.int)
+        param_flag = np.empty([len(self.input_forcings)], int)
         param_flag[:] = 0
         try:
             self.t2dDownscaleOpt = [input['Downscaling']['Temperature'] for input in inputs]
@@ -944,7 +964,6 @@ class ConfigOptions:
             except KeyError:
                 err_handler.err_out_screen('Unable to locate SuppPcpDirectories in SuppForcing section '
                                            'in the configuration file.')
-        
             # Loop through and ensure all supp pcp directories exist. Also strip out any whitespace
             # or new line characters.
             for dirTmp in range(0, len(self.supp_precip_dirs)):
@@ -1059,7 +1078,7 @@ class ConfigOptions:
         for optTmp in self.input_forcings:
             if optTmp == 'CFS_V2':
                 try:
-                    self.cfsv2EnsMember = input['Ensembles']['cfsEnsNumber']
+                    self.cfsv2EnsMember = [input['Ensembles']['cfsEnsNumber'] for input in inputs if 'cfsEnsNumber' in input['Ensembles']][0]
                 except KeyError:
                     err_handler.err_out_screen('Unable to locate cfsEnsNumber under the Ensembles '
                                                'section of the configuration file')
@@ -1072,4 +1091,4 @@ class ConfigOptions:
             hrs_since_start = self.current_output_date - self.current_fcst_cycle
             return hrs_since_start <= datetime.timedelta(hours = self.supp_pcp_max_hours)
         else:
-            return True 
+            return True

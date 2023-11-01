@@ -2,6 +2,7 @@ import pytest
 from core.config import ConfigOptions
 from core.forcingInputMod import input_forcings
 
+
 @pytest.fixture
 def config_options():
     config_path = './yaml/configOptions_valid.yaml'

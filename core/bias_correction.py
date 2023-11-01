@@ -44,6 +44,7 @@ def run_bias_correction(input_forcings, config_options, geo_meta_wrf_hydro, mpi_
         str(BiasCorrTempEnum.GFS.name)   : ncar_temp_gfs_bias_correct,
         str(BiasCorrTempEnum.HRRR.name)  : ncar_temp_hrrr_bias_correct
     }
+
     bias_correct_temperature[input_forcings.t2dBiasCorrectOpt](input_forcings, config_options, mpi_config, 0)
 
     err_handler.check_program_status(config_options, mpi_config)
@@ -383,7 +384,7 @@ def ncar_sw_hrrr_bias_correct(input_forcings, geo_meta_wrf_hydro, config_options
     # the cosine of the sol_zen_ang is proportional to the solar intensity
     # (not accounting for humidity or cloud cover)
     sol_cos = np.sin(geo_meta_wrf_hydro.latitude_grid * d2r) * math.sin(decl) + np.cos(geo_meta_wrf_hydro.latitude_grid * d2r) * math.cos(decl) * np.cos(ha)
-    
+
     # Check for any values outside of [-1,1] (this can happen due to floating point rounding)
     sol_cos[np.where(sol_cos < -1.0)] = -1.0
     sol_cos[np.where(sol_cos > 1.0)] = 1.0
@@ -794,6 +795,7 @@ def ncar_wspd_gfs_bias_correct(input_forcings, config_options, mpi_config, force
     ugrd_idx = input_forcings.grib_vars.index('UGRD')
     vgrd_idx = input_forcings.grib_vars.index('VGRD')
 
+    OutputEnum = config_options.OutputEnum
     for ind, xvar in enumerate(OutputEnum):
             if xvar.name == input_forcings.input_map_output[ugrd_idx]:
                 u_in = ind
@@ -820,20 +822,19 @@ def ncar_wspd_gfs_bias_correct(input_forcings, config_options, mpi_config, force
     # TODO: cache the "other" value so we don't repeat this calculation unnecessarily
 
     bias_corrected = ugrid_out if force_num == ugrd_idx else vgrid_out
-    OutputEnum = config_options.OutputEnum
     for ind, xvar in enumerate(OutputEnum):
             if xvar.name == input_forcings.input_map_output[force_num]:
                 outId = ind
                 break
     wind_in = None
     try:
-        wind_in = input_forcings.final_forcings[input_forcings.input_map_output[force_num], :, :]
+        wind_in = input_forcings.final_forcings[outId, :, :]
     except NumpyExceptions as npe:
         config_options.errMsg = "Unable to extract incoming windspeed from forcing object for: " + \
                                 input_forcings.productName + " (" + str(npe) + ")"
         err_handler.log_critical(config_options, mpi_config)
         err_handler.check_program_status(config_options, mpi_config)
-
+    
     ind_valid = None
     try:
         ind_valid = np.where(wind_in != config_options.globalNdv)
@@ -852,7 +853,7 @@ def ncar_wspd_gfs_bias_correct(input_forcings, config_options, mpi_config, force
         err_handler.check_program_status(config_options, mpi_config)
 
     try:
-        input_forcings.final_forcings[input_forcings.input_map_output[force_num], :, :] = wind_in[:, :]
+        input_forcings.final_forcings[outId, :, :] = wind_in[:, :]
     except NumpyExceptions as npe:
         config_options.errMsg = "Unable to place temporary windspeed array back into forcing object for: " + \
                                 input_forcings.productName + " (" + str(npe) + ")"
@@ -970,6 +971,7 @@ def cfsv2_nldas_nwm_bias_correct(input_forcings, config_options, mpi_config, for
         # Open the NetCDF file.
         try:
             id_nldas_param = Dataset(nldas_param_file, 'r')
+            id_nldas_param.set_auto_mask(False)                 # don't mask missing since it won't survive broadcast
         except OSError as err:
             config_options.errMsg = "Unable to open parameter file: " + nldas_param_file + " (" + str(err) + ")"
             err_handler.log_critical(config_options, mpi_config)
@@ -1078,6 +1080,7 @@ def cfsv2_nldas_nwm_bias_correct(input_forcings, config_options, mpi_config, for
         nldas_param_1 = None
         nldas_param_2 = None
         nldas_zero_pcp = None
+      
     err_handler.check_program_status(config_options, mpi_config)
 
     # Scatter NLDAS parameters
@@ -1298,7 +1301,7 @@ def cfsv2_nldas_nwm_bias_correct(input_forcings, config_options, mpi_config, for
     #     regridding object.
     # 6.) Place the data into the final output arrays for further processing (downscaling).
     # 7.) Reset variables for memory efficiency and exit the routine.
-    
+
     np.seterr(all='ignore')
 
     if mpi_config.rank == 0:
@@ -1314,12 +1317,15 @@ def cfsv2_nldas_nwm_bias_correct(input_forcings, config_options, mpi_config, for
         config_options.statusMsg = "Looping over local arrays to calculate bias corrections."
         err_handler.log_msg(config_options, mpi_config)
     # Process each of the pixel cells for this local processor on the CFS grid.
+    outId = None
+    for ind, xvar in enumerate(config_options.OutputEnum):
+        if xvar.name == input_forcings.input_map_output[force_num]:
+            outId = ind
+            break
     for x_local in range(0, input_forcings.nx_local):
         for y_local in range(0, input_forcings.ny_local):
-            cfs_prev_tmp = input_forcings.coarse_input_forcings1[input_forcings.input_map_output[force_num],
-                                                                 y_local, x_local]
-            cfs_next_tmp = input_forcings.coarse_input_forcings2[input_forcings.input_map_output[force_num],
-                                                                 y_local, x_local]
+            cfs_prev_tmp = input_forcings.coarse_input_forcings1[outId, y_local, x_local]
+            cfs_next_tmp = input_forcings.coarse_input_forcings2[outId, y_local, x_local]
 
             # Check for any missing parameter values. If any missing values exist,
             # set this flag to False. Further down, if it's False, we will simply
@@ -1541,7 +1547,7 @@ def cfsv2_nldas_nwm_bias_correct(input_forcings, config_options, mpi_config, for
     err_handler.check_program_status(config_options, mpi_config)
 
     try:
-        input_forcings.final_forcings[input_forcings.input_map_output[force_num], :, :] = \
+        input_forcings.final_forcings[outId, :, :] = \
             input_forcings.esmf_field_out.data
     except NumpyExceptions as npe:
         config_options.errMsg = "Unable to extract ESMF field data for CFSv2: " + str(npe)

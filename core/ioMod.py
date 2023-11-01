@@ -26,7 +26,7 @@ class OutputObj:
         self.output_local = None
         self.outPath = None
         self.outDate = None
-        self.out_ndv = -9999
+        self.out_ndv = -999999
 
         # Create local "slabs" to hold final output grids. These
         # will be collected during the output routine below.
@@ -163,7 +163,7 @@ class OutputObj:
                     break
 
                 try:
-                    idOut.model_total_valid_times = float(ConfigOptions.actual_output_steps)
+                    idOut.model_total_valid_times = np.int32(ConfigOptions.actual_output_steps)
                 except:
                     ConfigOptions.errMsg = "Unable to create total_valid_times global attribute in: " + self.outPath
                     err_handler.log_critical(ConfigOptions, MpiConfig)
@@ -172,7 +172,7 @@ class OutputObj:
                 if ConfigOptions.spatial_meta is not None:
                     # apply spatial_global_atts to output globals attrs
                     for k, v in geoMetaWrfHydro.spatial_global_atts.items():
-                        if k not in ("Source_Software", "history", "processing_notes"):     # don't add these
+                        if k not in ("Source_Software", "history", "processing_notes", "version"):     # don't add these
                             idOut.setncattr(k, v)
 
                 # Create variables.
@@ -534,6 +534,11 @@ def open_grib2(GribFileIn,NetCdfFileOut,Wgrib2Cmd,ConfigOptions,MpiConfig,
         out = None
         err = None
         exitcode = None
+
+        # remove temporary grib2.tbl file
+        g2path = os.path.join(ConfigOptions.scratch_dir, "grib2.tbl")
+        if os.path.isfile(g2path):
+            os.remove(g2path)
 
         # Ensure file exists.
         if not os.path.isfile(NetCdfFileOut):
