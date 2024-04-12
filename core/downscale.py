@@ -423,6 +423,9 @@ def nwm_monthly_PRISM_downscale(input_forcings,ConfigOptions,GeoMetaWrfHydro,Mpi
     mmVersion = 2
     if input_forcings.keyValue == 3:
         keyValueStr = 'GFS'
+    elif input_forcings.keyValue == 1:
+        keyValueStr = 'NLDAS'
+
     if mmVersion == None:
         ConfigOptions.errMsg = "Invalid Mountain Mapper Precip Downscaling option\n"
         err_handler.log_critical(ConfigOptions, MpiConfig)
